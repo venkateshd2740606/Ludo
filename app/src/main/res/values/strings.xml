@@ -58,6 +58,8 @@
     <string name="load_error_tutorial_not_found">Tutorial level not found.</string>
     <string name="roll_dice">Roll</string>
     <string name="player_red">Red</string>
+    <string name="player_green">Green</string>
+    <string name="player_yellow">Yellow</string>
     <string name="player_blue">Blue</string>
     <string name="dice">Dice</string>
     <string name="ok">OK</string>

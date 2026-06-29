@@ -51,6 +51,7 @@ fun LudoBoard(
     val boardDescription = stringResource(R.string.color_sort)
     val validMoves = if (game.canMove) LudoEngine.getValidMoves(game) else emptyList()
     val hintToken = LudoEngine.getHintMove(game)?.first?.takeIf { it >= 0 }
+    val activePlayers = LudoPlayer.activePlayers(game.level.playerCount)
 
     Column(
         modifier = modifier
@@ -60,11 +61,27 @@ fun LudoBoard(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        PlayerBanner(
-            player = LudoPlayer.RED,
-            isActive = game.currentPlayer == LudoPlayer.RED && !game.isCompleted,
-            label = stringResource(R.string.player_red)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (LudoPlayer.GREEN in activePlayers) {
+                PlayerBanner(
+                    player = LudoPlayer.GREEN,
+                    isActive = game.currentPlayer == LudoPlayer.GREEN && !game.isCompleted,
+                    label = stringResource(R.string.player_green),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (LudoPlayer.YELLOW in activePlayers) {
+                PlayerBanner(
+                    player = LudoPlayer.YELLOW,
+                    isActive = game.currentPlayer == LudoPlayer.YELLOW && !game.isCompleted,
+                    label = stringResource(R.string.player_yellow),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
 
         BoxWithConstraints(
             modifier = Modifier
@@ -80,22 +97,37 @@ fun LudoBoard(
                     .background(LudoPalette.boardGreen)
                     .border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
             ) {
-                LudoGridBackground(cellSize)
+                LudoGridBackground(cellSize, activePlayers)
                 LudoTokens(
                     game = game,
                     cellSize = cellSize,
                     validMoves = validMoves,
                     hintToken = hintToken,
+                    activePlayers = activePlayers,
                     onTokenClick = onTokenClick
                 )
             }
         }
 
-        PlayerBanner(
-            player = LudoPlayer.BLUE,
-            isActive = game.currentPlayer == LudoPlayer.BLUE && !game.isCompleted,
-            label = stringResource(R.string.player_blue)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PlayerBanner(
+                player = LudoPlayer.RED,
+                isActive = game.currentPlayer == LudoPlayer.RED && !game.isCompleted,
+                label = stringResource(R.string.player_red),
+                modifier = Modifier.weight(1f)
+            )
+            if (LudoPlayer.BLUE in activePlayers) {
+                PlayerBanner(
+                    player = LudoPlayer.BLUE,
+                    isActive = game.currentPlayer == LudoPlayer.BLUE && !game.isCompleted,
+                    label = stringResource(R.string.player_blue),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
 
         DicePanel(
             dice = game.lastDiceRoll,
@@ -106,7 +138,12 @@ fun LudoBoard(
 }
 
 @Composable
-private fun PlayerBanner(player: LudoPlayer, isActive: Boolean, label: String) {
+private fun PlayerBanner(
+    player: LudoPlayer,
+    isActive: Boolean,
+    label: String,
+    modifier: Modifier = Modifier
+) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (isActive) {
@@ -115,7 +152,7 @@ private fun PlayerBanner(player: LudoPlayer, isActive: Boolean, label: String) {
                 MaterialTheme.colorScheme.surfaceVariant
             }
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Text(
             text = if (isActive) "▶ $label" else label,
@@ -160,10 +197,10 @@ private fun DicePanel(dice: Int?, canRoll: Boolean, onRollDice: () -> Unit) {
 }
 
 @Composable
-private fun LudoGridBackground(cellSize: Dp) {
+private fun LudoGridBackground(cellSize: Dp, activePlayers: List<LudoPlayer>) {
     for (row in 0 until LudoEngine.BOARD_GRID) {
         for (col in 0 until LudoEngine.BOARD_GRID) {
-            val color = cellColor(row, col)
+            val color = cellColor(row, col, activePlayers)
             if (color != Color.Transparent) {
                 Box(
                     modifier = Modifier
@@ -186,21 +223,17 @@ private fun LudoGridBackground(cellSize: Dp) {
                 .border(0.5.dp, Color.Black.copy(alpha = 0.08f))
         )
     }
-    LudoEngine.RED_HOME_COORDS.forEach { (row, col) ->
-        Box(
-            modifier = Modifier
-                .offset(x = cellSize * col, y = cellSize * row)
-                .size(cellSize)
-                .background(LudoPalette.red.copy(alpha = 0.35f))
-        )
+    if (LudoPlayer.RED in activePlayers) {
+        drawHomeStretch(cellSize, LudoEngine.RED_HOME_COORDS, LudoPalette.red)
     }
-    LudoEngine.BLUE_HOME_COORDS.forEach { (row, col) ->
-        Box(
-            modifier = Modifier
-                .offset(x = cellSize * col, y = cellSize * row)
-                .size(cellSize)
-                .background(LudoPalette.blue.copy(alpha = 0.35f))
-        )
+    if (LudoPlayer.GREEN in activePlayers) {
+        drawHomeStretch(cellSize, LudoEngine.GREEN_HOME_COORDS, LudoPalette.green)
+    }
+    if (LudoPlayer.YELLOW in activePlayers) {
+        drawHomeStretch(cellSize, LudoEngine.YELLOW_HOME_COORDS, LudoPalette.yellow)
+    }
+    if (LudoPlayer.BLUE in activePlayers) {
+        drawHomeStretch(cellSize, LudoEngine.BLUE_HOME_COORDS, LudoPalette.blue)
     }
     Box(
         modifier = Modifier
@@ -211,17 +244,30 @@ private fun LudoGridBackground(cellSize: Dp) {
 }
 
 @Composable
+private fun drawHomeStretch(cellSize: Dp, coords: List<Pair<Int, Int>>, color: Color) {
+    coords.forEach { (row, col) ->
+        Box(
+            modifier = Modifier
+                .offset(x = cellSize * col, y = cellSize * row)
+                .size(cellSize)
+                .background(color.copy(alpha = 0.35f))
+        )
+    }
+}
+
+@Composable
 private fun LudoTokens(
     game: LudoGame,
     cellSize: Dp,
     validMoves: List<Int>,
     hintToken: Int?,
+    activePlayers: List<LudoPlayer>,
     onTokenClick: (Int) -> Unit
 ) {
     val tokenSize = cellSize * 0.72f
     val offset = cellSize * 0.14f
 
-    LudoPlayer.entries.forEach { player ->
+    activePlayers.forEach { player ->
         val isCurrent = game.currentPlayer == player
         game.tokens[player.ordinal].forEachIndexed { tokenIndex, position ->
             if (position == LudoEngine.FINISHED) return@forEachIndexed
@@ -258,12 +304,16 @@ private fun LudoTokens(
     }
 }
 
-private fun cellColor(row: Int, col: Int): Color {
+private fun cellColor(row: Int, col: Int, activePlayers: List<LudoPlayer>): Color {
     val inRedYard = row in 0..5 && col in 0..5
+    val inGreenYard = row in 0..5 && col in 9..14
+    val inYellowYard = row in 9..14 && col in 0..5
     val inBlueYard = row in 9..14 && col in 9..14
     return when {
-        inRedYard -> LudoPalette.redLight
-        inBlueYard -> LudoPalette.blueLight
+        inRedYard && LudoPlayer.RED in activePlayers -> LudoPalette.redLight
+        inGreenYard && LudoPlayer.GREEN in activePlayers -> LudoPalette.greenLight
+        inYellowYard && LudoPlayer.YELLOW in activePlayers -> LudoPalette.yellowLight
+        inBlueYard && LudoPlayer.BLUE in activePlayers -> LudoPalette.blueLight
         else -> Color.Transparent
     }
 }

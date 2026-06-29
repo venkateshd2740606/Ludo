@@ -50,7 +50,7 @@ class LudoEngineTest {
     fun homeStretch_finishesWithExactRoll() {
         val tokens = listOf(
             listOf(51, LudoEngine.HOME, LudoEngine.HOME, LudoEngine.HOME),
-            LudoEngine.defaultTokens()[1]
+            LudoEngine.defaultTokens(2)[LudoPlayer.BLUE.ordinal]
         )
         val level = TutorialLevels.getTutorialLevel(3)!!.copy(initialTokens = tokens)
         var game = LudoEngine.createInitialGame(level).copy(lastDiceRoll = 1, currentPlayer = LudoPlayer.RED)
@@ -59,6 +59,39 @@ class LudoEngineTest {
         game = game.copy(lastDiceRoll = 6, currentPlayer = LudoPlayer.RED)
         game = LudoEngine.moveToken(game, 0)!!
         assertEquals(LudoEngine.FINISHED, game.tokens[0][0])
+    }
+
+    @Test
+    fun fourPlayer_turnOrder_cyclesAllActivePlayers() {
+        val level = TutorialLevels.getTutorialLevel(5)!!.copy(playerCount = 4)
+        var game = LudoEngine.createInitialGame(level)
+        assertEquals(LudoPlayer.RED, game.currentPlayer)
+        game = advanceTurn(game)
+        assertEquals(LudoPlayer.GREEN, game.currentPlayer)
+        game = advanceTurn(game)
+        assertEquals(LudoPlayer.YELLOW, game.currentPlayer)
+        game = advanceTurn(game)
+        assertEquals(LudoPlayer.BLUE, game.currentPlayer)
+        game = advanceTurn(game)
+        assertEquals(LudoPlayer.RED, game.currentPlayer)
+    }
+
+    @Test
+    fun twoPlayer_turnOrder_skipsGreenAndYellow() {
+        val level = TutorialLevels.getTutorialLevel(5)!!.copy(playerCount = 2)
+        var game = LudoEngine.createInitialGame(level)
+        game = advanceTurn(game)
+        assertEquals(LudoPlayer.BLUE, game.currentPlayer)
+        game = advanceTurn(game)
+        assertEquals(LudoPlayer.RED, game.currentPlayer)
+    }
+
+    @Test
+    fun startCells_alignWithTrackIndices() {
+        assertEquals(LudoEngine.TRACK_COORDS[0], LudoEngine.TRACK_COORDS[LudoEngine.startCell(LudoPlayer.RED)])
+        assertEquals(LudoEngine.TRACK_COORDS[13], LudoEngine.TRACK_COORDS[LudoEngine.startCell(LudoPlayer.GREEN)])
+        assertEquals(LudoEngine.TRACK_COORDS[26], LudoEngine.TRACK_COORDS[LudoEngine.startCell(LudoPlayer.YELLOW)])
+        assertEquals(LudoEngine.TRACK_COORDS[39], LudoEngine.TRACK_COORDS[LudoEngine.startCell(LudoPlayer.BLUE)])
     }
 
     @Test
@@ -96,4 +129,12 @@ class LudoEngineTest {
             .copy(winner = LudoPlayer.RED, status = com.ludo.domain.model.GameStatus.COMPLETED)
         assertTrue(LudoEngine.isWon(game))
     }
+
+    private fun advanceTurn(game: com.ludo.domain.model.LudoGame): com.ludo.domain.model.LudoGame =
+        game.copy(
+            currentPlayer = game.currentPlayer.nextPlayer(game.level.playerCount),
+            lastDiceRoll = null,
+            extraRoll = false,
+            selectedTokenIndex = null
+        )
 }

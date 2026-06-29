@@ -107,9 +107,20 @@ data class GenerationProfile(
 
 enum class LudoPlayer {
     RED,
+    GREEN,
+    YELLOW,
     BLUE;
 
-    fun opponent(): LudoPlayer = if (this == RED) BLUE else RED
+    fun nextPlayer(playerCount: Int = 4): LudoPlayer {
+        val order = activePlayers(playerCount)
+        val index = order.indexOf(this)
+        return order[(index + 1) % order.size]
+    }
+
+    companion object {
+        fun activePlayers(playerCount: Int): List<LudoPlayer> =
+            if (playerCount == 2) listOf(RED, BLUE) else entries
+    }
 }
 
 enum class LudoLevelMode {
@@ -128,7 +139,8 @@ data class LudoLevel(
     val isTutorial: Boolean = false,
     val isEndless: Boolean = false,
     val challengeType: ChallengeType? = null,
-    val challengeKey: String? = null
+    val challengeKey: String? = null,
+    val playerCount: Int = 4
 )
 
 data class LudoGame(

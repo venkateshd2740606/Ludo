@@ -10,6 +10,10 @@ import kotlin.random.Random
 object LudoPalette {
     val red = Color(0xFFE53935)
     val redLight = Color(0xFFFFCDD2)
+    val green = Color(0xFF43A047)
+    val greenLight = Color(0xFFC8E6C9)
+    val yellow = Color(0xFFFDD835)
+    val yellowLight = Color(0xFFFFF9C4)
     val blue = Color(0xFF1E88E5)
     val blueLight = Color(0xFFBBDEFB)
     val boardGreen = Color(0xFF43A047)
@@ -19,11 +23,15 @@ object LudoPalette {
 
     fun colorForPlayer(player: LudoPlayer): Color = when (player) {
         LudoPlayer.RED -> red
+        LudoPlayer.GREEN -> green
+        LudoPlayer.YELLOW -> yellow
         LudoPlayer.BLUE -> blue
     }
 
     fun yardColorForPlayer(player: LudoPlayer): Color = when (player) {
         LudoPlayer.RED -> redLight
+        LudoPlayer.GREEN -> greenLight
+        LudoPlayer.YELLOW -> yellowLight
         LudoPlayer.BLUE -> blueLight
     }
 }
@@ -31,11 +39,11 @@ object LudoPalette {
 object LudoEngine {
 
     const val TOKENS_PER_PLAYER = 4
-    const val PLAYER_COUNT = 2
+    const val PLAYER_COUNT = 4
     const val TRACK_SIZE = 52
     const val HOME_STRETCH_LEN = 6
     const val HOME = -1
-    const val FINISHED = 64
+    const val FINISHED = 76
     const val BOARD_GRID = 15
 
     private val SAFE_CELLS = setOf(0, 8, 13, 21, 26, 34, 39, 47)
@@ -47,29 +55,70 @@ object LudoEngine {
     val RED_HOME_COORDS: List<Pair<Int, Int>> = listOf(
         7 to 1, 7 to 2, 7 to 3, 7 to 4, 7 to 5, 7 to 6
     )
+    val GREEN_HOME_COORDS: List<Pair<Int, Int>> = listOf(
+        1 to 7, 2 to 7, 3 to 7, 4 to 7, 5 to 7, 6 to 7
+    )
+    val YELLOW_HOME_COORDS: List<Pair<Int, Int>> = listOf(
+        13 to 7, 12 to 7, 11 to 7, 10 to 7, 9 to 7, 8 to 7
+    )
     val BLUE_HOME_COORDS: List<Pair<Int, Int>> = listOf(
         7 to 13, 7 to 12, 7 to 11, 7 to 10, 7 to 9, 7 to 8
     )
 
     /** Yard slot positions for each player's 4 tokens. */
     val RED_YARD_COORDS: List<Pair<Int, Int>> = listOf(2 to 2, 2 to 4, 4 to 2, 4 to 4)
+    val GREEN_YARD_COORDS: List<Pair<Int, Int>> = listOf(2 to 10, 2 to 12, 4 to 10, 4 to 12)
+    val YELLOW_YARD_COORDS: List<Pair<Int, Int>> = listOf(10 to 2, 10 to 4, 12 to 2, 12 to 4)
     val BLUE_YARD_COORDS: List<Pair<Int, Int>> = listOf(10 to 10, 10 to 12, 12 to 10, 12 to 12)
 
     fun startCell(player: LudoPlayer): Int = when (player) {
         LudoPlayer.RED -> 0
-        LudoPlayer.BLUE -> 26
+        LudoPlayer.GREEN -> 13
+        LudoPlayer.YELLOW -> 26
+        LudoPlayer.BLUE -> 39
     }
 
     fun homeStretchStart(player: LudoPlayer): Int = when (player) {
         LudoPlayer.RED -> 52
-        LudoPlayer.BLUE -> 58
+        LudoPlayer.GREEN -> 58
+        LudoPlayer.YELLOW -> 64
+        LudoPlayer.BLUE -> 70
     }
 
-    fun defaultTokens(): List<List<Int>> =
-        List(PLAYER_COUNT) { List(TOKENS_PER_PLAYER) { HOME } }
+    fun isPlayerActive(player: LudoPlayer, playerCount: Int): Boolean =
+        player in LudoPlayer.activePlayers(playerCount)
+
+    fun defaultTokens(playerCount: Int = PLAYER_COUNT): List<List<Int>> =
+        LudoPlayer.entries.map { player ->
+            if (isPlayerActive(player, playerCount)) {
+                List(TOKENS_PER_PLAYER) { HOME }
+            } else {
+                List(TOKENS_PER_PLAYER) { FINISHED }
+            }
+        }
+
+    private fun resolveTokens(level: LudoLevel): List<List<Int>> {
+        val raw = level.initialTokens ?: return defaultTokens(level.playerCount)
+        if (raw.size == 2 && level.playerCount == 2) {
+            return LudoPlayer.entries.map { player ->
+                when (player) {
+                    LudoPlayer.RED -> raw[0]
+                    LudoPlayer.BLUE -> raw[1]
+                    else -> List(TOKENS_PER_PLAYER) { FINISHED }
+                }
+            }
+        }
+        return LudoPlayer.entries.mapIndexed { index, player ->
+            when {
+                index < raw.size -> raw[index]
+                isPlayerActive(player, level.playerCount) -> List(TOKENS_PER_PLAYER) { HOME }
+                else -> List(TOKENS_PER_PLAYER) { FINISHED }
+            }
+        }
+    }
 
     fun createInitialGame(level: LudoLevel): LudoGame {
-        val tokens = level.initialTokens?.map { it.toList() } ?: defaultTokens()
+        val tokens = resolveTokens(level)
         return LudoGame(
             level = level,
             tokens = tokens,
@@ -129,9 +178,9 @@ object LudoEngine {
         val newPos = computeNewPosition(player, currentPos, dice) ?: return null
 
         tokens[player.ordinal][tokenIndex] = newPos
-        applyCapture(tokens, player, newPos)
+        applyCapture(tokens, player, newPos, game.level.playerCount)
 
-        val winner = findWinner(tokens)
+        val winner = findWinner(tokens, game.level.playerCount)
         val gameOver = winner != null
         val grantsExtra = game.extraRoll && dice == 6
 
@@ -166,7 +215,7 @@ object LudoEngine {
     }
 
     private fun endTurn(game: LudoGame): LudoGame = game.copy(
-        currentPlayer = game.currentPlayer.opponent(),
+        currentPlayer = game.currentPlayer.nextPlayer(game.level.playerCount),
         lastDiceRoll = null,
         extraRoll = false,
         selectedTokenIndex = null
@@ -209,18 +258,25 @@ object LudoEngine {
 
     fun isSafeCell(pos: Int): Boolean = pos in SAFE_CELLS
 
-    private fun applyCapture(tokens: MutableList<MutableList<Int>>, player: LudoPlayer, landingPos: Int) {
+    private fun applyCapture(
+        tokens: MutableList<MutableList<Int>>,
+        player: LudoPlayer,
+        landingPos: Int,
+        playerCount: Int
+    ) {
         if (!isOnTrack(landingPos) || landingPos in SAFE_CELLS) return
-        val opponent = player.opponent()
-        val opponentTokens = tokens[opponent.ordinal]
-        val onCell = opponentTokens.indices.filter { opponentTokens[it] == landingPos }
-        if (onCell.size == 1) {
-            opponentTokens[onCell.single()] = HOME
+        LudoPlayer.activePlayers(playerCount).forEach { opponent ->
+            if (opponent == player) return@forEach
+            val opponentTokens = tokens[opponent.ordinal]
+            val onCell = opponentTokens.indices.filter { opponentTokens[it] == landingPos }
+            if (onCell.size == 1) {
+                opponentTokens[onCell.single()] = HOME
+            }
         }
     }
 
-    private fun findWinner(tokens: List<List<Int>>): LudoPlayer? {
-        LudoPlayer.entries.forEach { player ->
+    private fun findWinner(tokens: List<List<Int>>, playerCount: Int): LudoPlayer? {
+        LudoPlayer.activePlayers(playerCount).forEach { player ->
             if (tokens[player.ordinal].all { it == FINISHED }) return player
         }
         return null
@@ -260,9 +316,11 @@ object LudoEngine {
         if (to == FINISHED) score += 100
         if (from == HOME && to == startCell(player)) score += 40
         if (isOnTrack(to) && to !in SAFE_CELLS) {
-            val opponent = player.opponent()
-            val onCell = game.tokens[opponent.ordinal].count { it == to }
-            if (onCell == 1) score += 80
+            LudoPlayer.activePlayers(game.level.playerCount).forEach { opponent ->
+                if (opponent == player) return@forEach
+                val onCell = game.tokens[opponent.ordinal].count { it == to }
+                if (onCell == 1) score += 80
+            }
         }
         if (isInHomeStretch(to, player)) score += 30 + (to - homeStretchStart(player))
         if (isOnTrack(to)) score += distanceFromStart(player, to) / 4
@@ -287,13 +345,36 @@ object LudoEngine {
     }
 
     fun yardCoord(player: LudoPlayer, tokenIndex: Int): Pair<Int, Int> {
-        val coords = if (player == LudoPlayer.RED) RED_YARD_COORDS else BLUE_YARD_COORDS
+        val coords = when (player) {
+            LudoPlayer.RED -> RED_YARD_COORDS
+            LudoPlayer.GREEN -> GREEN_YARD_COORDS
+            LudoPlayer.YELLOW -> YELLOW_YARD_COORDS
+            LudoPlayer.BLUE -> BLUE_YARD_COORDS
+        }
         return coords[tokenIndex % coords.size]
     }
 
     fun homeStretchCoord(player: LudoPlayer, index: Int): Pair<Int, Int> {
-        val coords = if (player == LudoPlayer.RED) RED_HOME_COORDS else BLUE_HOME_COORDS
+        val coords = when (player) {
+            LudoPlayer.RED -> RED_HOME_COORDS
+            LudoPlayer.GREEN -> GREEN_HOME_COORDS
+            LudoPlayer.YELLOW -> YELLOW_HOME_COORDS
+            LudoPlayer.BLUE -> BLUE_HOME_COORDS
+        }
         return coords[index.coerceIn(0, coords.lastIndex)]
+    }
+
+    fun ensureTokenLists(tokens: List<List<Int>>, playerCount: Int): List<List<Int>> {
+        if (tokens.size >= PLAYER_COUNT) return tokens
+        return resolveTokens(
+            LudoLevel(
+                seed = 0,
+                levelNumber = 0,
+                difficulty = com.ludo.domain.model.Difficulty.EASY,
+                initialTokens = tokens,
+                playerCount = playerCount
+            )
+        )
     }
 
     fun validateLevel(level: LudoLevel): Boolean = true

@@ -218,6 +218,9 @@ class GameViewModel @Inject constructor(
             val id = gameRepository.saveGame(newGame)
             _game.value = newGame.copy(id = id)
             analyticsManager.logGameStarted(difficulty, levelNumber)
+            if (campaignVsAi && isBotTurn(newGame.copy(id = id))) {
+                runCampaignBotTurn()
+            }
         }
     }
 
@@ -386,6 +389,16 @@ class GameViewModel @Inject constructor(
 
     private var campaignVsAi = false
 
+    private fun isBotPlayer(player: LudoPlayer, game: LudoGame): Boolean {
+        if (!campaignVsAi) return false
+        return when (game.level.playerCount) {
+            2 -> player == LudoPlayer.BLUE
+            else -> player != LudoPlayer.RED
+        }
+    }
+
+    private fun isBotTurn(game: LudoGame): Boolean = isBotPlayer(game.currentPlayer, game)
+
     fun onRollDice() {
         val current = _game.value ?: return
         when {
@@ -416,14 +429,14 @@ class GameViewModel @Inject constructor(
                 if (updated.isCompleted) handleCompletion(updated)
                 return
             }
-            campaignVsAi && current.currentPlayer == LudoPlayer.BLUE -> return
+            campaignVsAi && isBotTurn(current) -> return
             else -> {
                 val updated = LudoEngine.rollDice(current)
                 _game.value = updated
                 viewModelScope.launch { gameRepository.saveGame(updated) }
                 if (updated.isCompleted) {
                     handleCompletion(updated)
-                } else if (campaignVsAi && updated.currentPlayer == LudoPlayer.BLUE) {
+                } else if (campaignVsAi && isBotTurn(updated)) {
                     runCampaignBotTurn()
                 }
             }
@@ -468,14 +481,14 @@ class GameViewModel @Inject constructor(
                 if (updated.isCompleted) handleCompletion(updated)
                 return
             }
-            campaignVsAi && current.currentPlayer == LudoPlayer.BLUE -> return
+            campaignVsAi && isBotTurn(current) -> return
             else -> {
                 val updated = LudoEngine.moveToken(current, tokenIndex) ?: return
                 _game.value = updated
                 viewModelScope.launch { gameRepository.saveGame(updated) }
                 when {
                     updated.isCompleted -> handleCompletion(updated)
-                    campaignVsAi && updated.currentPlayer == LudoPlayer.BLUE -> runCampaignBotTurn()
+                    campaignVsAi && isBotTurn(updated) -> runCampaignBotTurn()
                 }
             }
         }
@@ -485,7 +498,7 @@ class GameViewModel @Inject constructor(
         viewModelScope.launch {
             delay(600)
             val current = _game.value ?: return@launch
-            if (current.isCompleted || current.currentPlayer != LudoPlayer.BLUE) return@launch
+            if (current.isCompleted || !isBotTurn(current)) return@launch
             var state = current
             if (state.needsRoll) {
                 state = LudoEngine.rollDice(state)
@@ -494,7 +507,7 @@ class GameViewModel @Inject constructor(
             if (move.first < 0) {
                 _game.value = state
                 gameRepository.saveGame(state)
-                if (state.currentPlayer == LudoPlayer.RED) return@launch
+                if (!isBotTurn(state)) return@launch
                 runCampaignBotTurn()
                 return@launch
             }
@@ -503,7 +516,7 @@ class GameViewModel @Inject constructor(
             gameRepository.saveGame(updated)
             if (updated.isCompleted) {
                 handleCompletion(updated)
-            } else if (updated.currentPlayer == LudoPlayer.BLUE) {
+            } else if (isBotTurn(updated)) {
                 runCampaignBotTurn()
             }
         }

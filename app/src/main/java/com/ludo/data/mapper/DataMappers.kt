@@ -60,7 +60,8 @@ object DataMappers {
             LevelJson(
                 initialTokens = game.level.initialTokens,
                 useSeededDice = game.level.useSeededDice,
-                mode = game.level.mode.name
+                mode = game.level.mode.name,
+                playerCount = game.level.playerCount
             )
         ),
         coinsEarned = game.coinsEarned,
@@ -72,10 +73,6 @@ object DataMappers {
             .getOrNull() ?: LevelJson()
         val state = runCatching { gson.fromJson(entity.tubeStateJson, GameStateJson::class.java) }
             .getOrNull()
-        val tokens: List<List<Int>> = state?.tokens
-            ?: runCatching { gson.fromJson<List<List<Int>>>(entity.tubeStateJson, intListType) }
-                .getOrNull()
-            ?: LudoEngine.defaultTokens()
         val level = LudoLevel(
             id = entity.id,
             seed = entity.seed,
@@ -85,11 +82,17 @@ object DataMappers {
             useSeededDice = levelJson.useSeededDice,
             mode = runCatching { LudoLevelMode.valueOf(levelJson.mode) }
                 .getOrDefault(LudoLevelMode.STANDARD),
+            playerCount = levelJson.playerCount,
             isTutorial = entity.isTutorial,
             isEndless = entity.isEndless,
             challengeType = entity.challengeType?.let { ChallengeType.valueOf(it) },
             challengeKey = entity.challengeKey
         )
+        val rawTokens: List<List<Int>> = state?.tokens
+            ?: runCatching { gson.fromJson<List<List<Int>>>(entity.tubeStateJson, intListType) }
+                .getOrNull()
+            ?: LudoEngine.defaultTokens(level.playerCount)
+        val tokens = LudoEngine.ensureTokenLists(rawTokens, level.playerCount)
         return LudoGame(
             id = entity.id,
             level = level,
@@ -261,7 +264,8 @@ object DataMappers {
     data class LevelJson(
         val initialTokens: List<List<Int>>? = null,
         val useSeededDice: Boolean = false,
-        val mode: String = LudoLevelMode.STANDARD.name
+        val mode: String = LudoLevelMode.STANDARD.name,
+        val playerCount: Int = 4
     )
 
     data class GameStateJson(
